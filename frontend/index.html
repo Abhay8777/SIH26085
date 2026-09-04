@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <meta
+        name="description"
+        content="Team Echelon - SIH26085 Urban Flood Nowcasting System"
+    >
+
+    <title>
+        Team Echelon | SIH26085 Urban Flood Nowcasting
+    </title>
+
+    <!-- FAVICON - prevents 404 -->
+    <link
+        rel="icon"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='85'%3E%F0%9F%8C%A7%EF%B8%8F%3C/text%3E%3C/svg%3E"
+    >
+
+    <!-- =====================================================
+         LEAFLET CSS
+         ===================================================== -->
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    >
+
+    <!-- =====================================================
+         DASHBOARD CSS
+         ===================================================== -->
+
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
+
+    <!-- =====================================================
+         SIMPLE INTRO THEME
+         ===================================================== -->
+
+    <style>
+
+        html,
+        body {
+            min-height: 100%;
+        }
+
+        /* =================================================
+           INTRO SCREEN
+           ================================================= */
+
+        .echelon-intro {
+            position: fixed;
+            inset: 0;
+            z-index: 99999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+
+            background:
+                radial-gradient(
+                    circle at center,
+                    rgba(14, 165, 233, 0.16),
+                    transparent 30%
+                ),
+                linear-gradient(
+                    135deg,
+                    #020d18 0%,
+                    #04333e 50%,
+                    #06452f 100%
+                );
+
+            transition:
+                opacity 0.8s ease,
+                visibility 0.8s ease,
+                transform 0.8s ease;
+        }
+
+        .echelon-intro.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transform: scale(1.04);
+        }
+
+        .intro-grid {
+            position: absolute;
+            inset: -50%;
+            opacity: 0.14;
+
+            background-image:
+                linear-gradient(
+                    rgba(56, 189, 248, 0.22) 1px,
+                    transparent 1px
+                ),
+                linear-gradient(
+                    90deg,
+                    rgba(74, 222, 128, 0.18) 1px,
+                    transparent 1px
+                );
+
+            background-size: 55px 55px;
+
+            transform:
+                perspective(500px)
+                rotateX(60deg);
+        }
+
+        .intro-particles {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        .intro-particles span {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: #38bdf8;
+            opacity: 0.5;
+
+            animation:
+                introFloat 6s infinite ease-in-out;
+        }
+
+        .intro-particles span:nth-child(1) {
+            left: 10%;
+            top: 20%;
+        }
+
+        .intro-particles span:nth-child(2) {
+            left: 20%;
+            top: 70%;
+        }
+
+        .intro-particles span:nth-child(3) {
+            left: 35%;
+            top: 15%;
+        }
+
+        .intro-particles span:nth-child(4) {
+            left: 50%;
+            top: 80%;
+        }
+
+        .intro-particles span:nth-child(5) {
+            left: 65%;
+            top: 25%;
+        }
+
+        .intro-particles span:nth-child(6) {
+            left: 75%;
+            top: 65%;
+        }
+
+        .intro-particles span:nth-child(7) {
+            left: 85%;
+            top: 15%;
+        }
+
+        .intro-particles span:nth-child(8) {
+            left: 90%;
+            top: 80%;
+        }
+
+        .intro-particles span:nth-child(9) {
+            left: 45%;
+            top: 35%;
+        }
+
+        .intro-particles span:nth-child(10) {
+            left: 15%;
+            top: 45%;
+        }
+
+        @keyframes introFloat {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-18px);
+            }
+        }
+
+        /* =================================================
+           RADAR
+           ================================================= */
+
+        .radar-system {
+            position: absolute;
+            width: 520px;
+            height: 520px;
+            border-radius: 50%;
+            opacity: 0.45;
+        }
+
+        .radar-ring {
+            position: absolute;
+            inset: 0;
+
+            border: 1px solid rgba(
+                56,
+                189,
+                248,
+                0.18
+            );
+
+            border-radius: 50%;
+        }
+
+        .ring-2 {
+            inset: 15%;
+        }
+
+        .ring-3 {
+            inset: 30%;
+        }
+
+        .radar-sweep {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+
+            background:
+                conic-gradient(
+                    from 0deg,
+                    transparent 0deg,
+                    rgba(
+                        34,
+                        197,
+                        94,
+                        0.18
+                    ) 35deg,
+                    transparent 70deg
+                );
+
+            animation:
+                radarSpin 5s linear infinite;
+        }
+
+        .radar-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+
+            width: 12px;
+            height: 12px;
+
+            transform:
+                translate(-50%, -50%);
+
+            border-radius: 50%;
+            background: #22c55e;
+
+            box-shadow:
+                0 0 25px
+                rgba(
+                    34,
+                    197,
+                    94,
+                    0.8
+                );
+        }
+
+        @keyframes radarSpin {
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* =================================================
+           WATER WAVES
+           ================================================= */
+
+        .water-wave {
+            position: absolute;
+
+            width: 500px;
+            height: 500px;
+
+            border: 1px solid
+                rgba(
+                    56,
+                    189,
+                    248,
+                    0.12
+                );
+
+            border-radius: 50%;
+
+            animation:
+                wavePulse 4s infinite ease-out;
+        }
+
+        .wave-1 {
+            animation-delay: 0s;
+        }
+
+        .wave-2 {
+            animation-delay: 1.3s;
+        }
+
+        .wave-3 {
+            animation-delay: 2.6s;
+        }
+
+        @keyframes wavePulse {
+
+            0% {
+                transform: scale(0.5);
+                opacity: 0.5;
+            }
+
+            100% {
+                transform: scale(1.4);
+                opacity: 0;
+            }
+        }
+
+        /* =================================================
+           INTRO CONTENT
+           ================================================= */
+
+        .echelon-content {
+            position: relative;
+            z-index: 2;
+
+            text-align: center;
+            color: white;
+            padding: 30px;
+        }
+
+        .echelon-small {
+            font-size: 12px;
+            letter-spacing: 5px;
+            color: #67e8f9;
+            margin-bottom: 22px;
+        }
+
+        .echelon-logo {
+            position: relative;
+
+            width: 92px;
+            height: 92px;
+
+            margin:
+                0 auto 20px;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            border:
+                1px solid
+                rgba(
+                    103,
+                    232,
+                    249,
+                    0.5
+                );
+
+            border-radius: 50%;
+
+            background:
+                rgba(
+                    8,
+                    47,
+                    53,
+                    0.55
+                );
+
+            box-shadow:
+                0 0 50px
+                rgba(
+                    34,
+                    211,
+                    238,
+                    0.2
+                );
+        }
+
+        .logo-drop {
+            font-size: 42px;
+            color: #38bdf8;
+        }
+
+        .echelon-title {
+            margin: 0;
+            font-size: 42px;
+            letter-spacing: 5px;
+        }
+
+        .echelon-line {
+            width: 100px;
+            height: 2px;
+
+            margin:
+                18px auto;
+
+            background:
+                linear-gradient(
+                    90deg,
+                    transparent,
+                    #38bdf8,
+                    #22c55e,
+                    transparent
+                );
+        }
+
+        .echelon-project-code {
+            margin: 0 0 10px;
+            color: #67e8f9;
+            font-weight: 700;
+            letter-spacing: 3px;
+        }
+
+        .echelon-project {
+            margin: 0;
+            font-size: 21px;
+            line-height: 1.6;
+        }
+
+        .echelon-project span {
+            color: #a7f3d0;
+        }
+
+        .echelon-subtitle {
+            margin-top: 18px;
+            color: #cbd5e1;
+        }
+
+        .pulse-dot {
+            display: inline-block;
+
+            width: 8px;
+            height: 8px;
+
+            margin-right: 8px;
+
+            border-radius: 50%;
+            background: #22c55e;
+
+            box-shadow:
+                0 0 12px
+                rgba(
+                    34,
+                    197,
+                    94,
+                    0.8
+                );
+        }
+
+        .echelon-enter {
+            margin-top: 28px;
+
+            padding:
+                13px 25px;
+
+            border:
+                1px solid
+                #67e8f9;
+
+            border-radius: 8px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #0e7490,
+                    #047857
+                );
+
+            color: white;
+            font-weight: 800;
+            cursor: pointer;
+
+            transition:
+                transform 0.2s ease,
+                box-shadow 0.2s ease;
+        }
+
+        .echelon-enter:hover {
+            transform:
+                translateY(-2px);
+
+            box-shadow:
+                0 10px 30px
+                rgba(
+                    34,
+                    211,
+                    238,
+                    0.25
+                );
+        }
+
+        .echelon-enter b {
+            margin-left: 12px;
+        }
+
+        .echelon-footer {
+            position: absolute;
+
+            bottom: 24px;
+            left: 0;
+            right: 0;
+
+            z-index: 2;
+
+            text-align: center;
+
+            font-size: 10px;
+            letter-spacing: 4px;
+            color: #64748b;
+        }
+
+        /* =================================================
+           USER-FRIENDLY DASHBOARD ADDITIONS
+           ================================================= */
+
+        .user-hint {
+            margin:
+                8px 0 0;
+
+            padding:
+                9px 11px;
+
+            border-radius: 8px;
+
+            background:
+                rgba(
+                    14,
+                    165,
+                    233,
+                    0.08
+                );
+
+            border:
+                1px solid
+                rgba(
+                    56,
+                    189,
+                    248,
+                    0.15
+                );
+
+            color: #cbd5e1;
+
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .action-hint {
+            margin-top: 10px;
+
+            padding:
+                9px 11px;
+
+            border-radius: 8px;
+
+            background:
+                rgba(
+                    34,
+                    197,
+                    94,
+                    0.08
+                );
+
+            border:
+                1px solid
+                rgba(
+                    34,
+                    197,
+                    94,
+                    0.18
+                );
+
+            color: #d1fae5;
+
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        @media (max-width: 600px) {
+
+            .radar-system {
+                width: 360px;
+                height: 360px;
+            }
+
+            .echelon-title {
+                font-size: 30px;
+                letter-spacing: 3px;
+            }
+
+            .echelon-project {
+                font-size: 18px;
+            }
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+    <!-- =====================================================
+         TEAM ECHELON INTRO
+         ===================================================== -->
+
+    <div
+        class="echelon-intro"
+        id="echelon-intro"
+    >
+
+        <div class="intro-grid"></div>
+
+        <div class="intro-particles">
+
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+
+        </div>
+
+        <div class="radar-system">
+
+            <div class="radar-ring ring-1"></div>
+
+            <div class="radar-ring ring-2"></div>
+
+            <div class="radar-ring ring-3"></div>
+
+            <div class="radar-sweep"></div>
+
+            <div class="radar-center"></div>
+
+        </div>
+
+        <div class="water-wave wave-1"></div>
+
+        <div class="water-wave wave-2"></div>
+
+        <div class="water-wave wave-3"></div>
+
+        <div class="echelon-content">
+
+            <div class="echelon-small">
+                SMART INDIA HACKATHON 2026
+            </div>
+
+            <div class="echelon-logo">
+
+                <span class="logo-drop">
+                    ◈
+                </span>
+
+            </div>
+
+            <h1 class="echelon-title">
+                TEAM ECHELON
+            </h1>
+
+            <div class="echelon-line"></div>
+
+            <p class="echelon-project-code">
+                SIH26085
+            </p>
+
+            <p class="echelon-project">
+
+                Urban Flood Nowcasting System
+
+                <br>
+
+                <span>
+                    Drainage &amp; Rainfall Coupling
+                </span>
+
+            </p>
+
+            <p class="echelon-subtitle">
+
+                <span class="pulse-dot"></span>
+
+                0–3 Hour Urban Flood Intelligence
+
+            </p>
+
+            <button
+                class="echelon-enter"
+                id="echelon-enter-btn"
+                type="button"
+            >
+
+                <span>
+                    ENTER DASHBOARD
+                </span>
+
+                <b>
+                    →
+                </b>
+
+            </button>
+
+        </div>
+
+        <div class="echelon-footer">
+
+            TEAM ECHELON
+
+            <span>•</span>
+
+            URBAN FLOOD INTELLIGENCE
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         TOP BAR
+         ===================================================== -->
+
+    <header class="topbar">
+
+        <div class="topbar-title">
+
+            <h1>
+                SIH26085 Urban Flood Nowcasting
+            </h1>
+
+            <p>
+                Mumbai Urban Flood Risk Dashboard
+            </p>
+
+        </div>
+
+        <div
+            class="status"
+            id="backend-status"
+        >
+
+            <span class="status-dot"></span>
+
+            <span id="backend-status-text">
+                Backend Online
+            </span>
+
+            <div class="data-mode-badge">
+                DEVELOPMENT SIMULATION
+            </div>
+
+        </div>
+
+    </header>
+
+
+    <!-- =====================================================
+         MAIN DASHBOARD
+         ===================================================== -->
+
+    <main class="dashboard">
+
+
+        <!-- =================================================
+             SIDEBAR
+             ================================================= -->
+
+        <aside class="sidebar">
+
+
+            <!-- FLOOD OVERVIEW -->
+
+            <section class="panel">
+
+                <h2>
+                    🌧️ Flood Risk Overview
+                </h2>
+
+                <div class="control-group">
+
+                    <label for="scenario-select">
+                        Rainfall Scenario
+                    </label>
+
+                    <select id="scenario-select">
+
+                        <option value="normal">
+                            Normal
+                        </option>
+
+                        <option
+                            value="heavy"
+                            selected
+                        >
+                            Heavy
+                        </option>
+
+                        <option value="extreme">
+                            Extreme
+                        </option>
+
+                    </select>
+
+                </div>
+
+                <div class="control-group">
+
+                    <label for="forecast-time">
+                        Check Flood Risk At
+                    </label>
+
+                    <select id="forecast-time">
+
+                        <option value="0">
+                            Now
+                        </option>
+
+                        <option value="30">
+                            +30 min
+                        </option>
+
+                        <option value="60">
+                            +60 min
+                        </option>
+
+                        <option value="90">
+                            +90 min
+                        </option>
+
+                        <option value="120">
+                            +120 min
+                        </option>
+
+                        <option value="150">
+                            +150 min
+                        </option>
+
+                        <option value="180">
+                            +180 min
+                        </option>
+
+                    </select>
+
+                </div>
+
+                <div class="user-hint">
+
+                    Choose a rainfall scenario and forecast
+                    time to see the expected urban flood risk.
+
+                </div>
+
+                <div class="stat-grid">
+
+                    <div class="stat-card">
+
+                        <span>
+                            Flood Alert
+                        </span>
+
+                        <strong
+                            id="overall-status"
+                            class="risk-value"
+                        >
+                            Loading...
+                        </strong>
+
+                    </div>
+
+                    <div class="stat-card">
+
+                        <span>
+                            Water Depth
+                        </span>
+
+                        <strong id="max-depth">
+                            -- cm
+                        </strong>
+
+                    </div>
+
+                    <div class="stat-card">
+
+                        <span>
+                            Affected Areas
+                        </span>
+
+                        <strong id="flooded-cells">
+                            --
+                        </strong>
+
+                    </div>
+
+                    <div class="stat-card">
+
+                        <span>
+                            Critical Drains
+                        </span>
+
+                        <strong id="overloaded-drains">
+                            --
+                        </strong>
+
+                    </div>
+
+                </div>
+
+                <div class="action-hint">
+
+                    💡 Use the map colours to identify
+                    low, moderate, high and severe flood areas.
+
+                </div>
+
+            </section>
+
+
+            <!-- SAFE ROUTE -->
+
+            <section class="panel">
+
+                <h2>
+                    🚗 Recommended Safe Route
+                </h2>
+
+                <div class="route-status-card">
+
+                    <div class="route-status-row">
+                        <span>Route Safety</span>
+                        <strong id="route-status">--</strong>
+                    </div>
+
+                    <div class="route-status-row">
+                        <span>Start Node</span>
+                        <strong id="route-start">--</strong>
+                    </div>
+
+                    <div class="route-status-row">
+                        <span>Destination</span>
+                        <strong id="route-destination">--</strong>
+                    </div>
+
+                    <div class="route-status-row">
+                        <span>Distance</span>
+                        <strong id="route-distance">-- m</strong>
+                    </div>
+
+                    <div class="route-status-row">
+                        <span>Water Depth on Route</span>
+                        <strong id="route-depth">-- cm</strong>
+                    </div>
+
+                    <div class="route-status-row">
+                        <span>Blocked Sections</span>
+                        <strong id="route-blocked">--</strong>
+                    </div>
+
+                    <div class="route-status-row">
+                        <span>Dangerous Sections</span>
+                        <strong id="route-dangerous">--</strong>
+                    </div>
+
+                </div>
+
+                <div class="user-hint">
+
+                    🟢 Safe &nbsp; 🟡 Caution &nbsp;
+                    🔴 Blocked
+
+                </div>
+
+            </section>
+
+
+            <!-- DRAINAGE BLOCKAGE -->
+
+            <section class="panel">
+
+                <h2>
+                    🚧 What If a Drain Is Blocked?
+                </h2>
+
+                <div class="blockage-controls">
+
+                    <div class="control-group">
+
+                        <label for="blocked-edge-select">
+                            Select Drain to Test
+                        </label>
+
+                        <select id="blocked-edge-select">
+
+                            <option value="E1">
+                                E1 — N1 → N2
+                            </option>
+
+                            <option
+                                value="E2"
+                                selected
+                            >
+                                E2 — N2 → N3
+                            </option>
+
+                            <option value="E3">
+                                E3 — N3 → N4
+                            </option>
+
+                        </select>
+
+                    </div>
+
+                    <button
+                        id="simulate-blockage-btn"
+                        type="button"
+                    >
+                        Simulate Blockage
+                    </button>
+
+                </div>
+
+                <div class="blockage-status-card">
+
+                    <div class="route-status-row">
+                        <span>Test Status</span>
+                        <strong id="blockage-status">Ready</strong>
+                    </div>
+
+                    <div class="route-status-row">
+                        <span>Tested Drain</span>
+                        <strong id="blocked-edge">--</strong>
+                    </div>
+
+                    <div class="route-status-row">
+                        <span>Normal Capacity</span>
+                        <strong id="original-capacity">-- m³/s</strong>
+                    </div>
+
+                    <div class="route-status-row">
+                        <span>Blocked Capacity</span>
+                        <strong id="simulated-capacity">-- m³/s</strong>
+                    </div>
+
+                    <div class="route-status-row">
+                        <span>Capacity Lost</span>
+                        <strong id="capacity-reduction">-- %</strong>
+                    </div>
+
+                    <div class="route-status-row">
+                        <span>Drain Load</span>
+                        <strong id="blockage-utilization">-- %</strong>
+                    </div>
+
+                    <div class="route-status-row">
+                        <span>Drain Condition</span>
+                        <strong id="blockage-edge-status">--</strong>
+                    </div>
+
+                    <div class="route-status-row">
+                        <span>Affected Areas</span>
+                        <strong id="blockage-impacted-cells">--</strong>
+                    </div>
+
+                    <div class="route-status-row">
+                        <span>Normal Peak Depth</span>
+                        <strong id="blockage-original-depth">-- cm</strong>
+                    </div>
+
+                    <div class="route-status-row">
+                        <span>Blocked Peak Depth</span>
+                        <strong id="blockage-simulated-depth">-- cm</strong>
+                    </div>
+
+                </div>
+
+                <p class="simulation-note">
+
+                    Development stress-test only —
+                    this does not represent live municipal
+                    blockage data.
+
+                </p>
+
+            </section>
+
+
+            <!-- FORECAST -->
+
+            <section class="panel">
+
+                <h2>
+                    📈 0–3 Hour Flood Forecast
+                </h2>
+
+                <div class="user-hint">
+
+                    Rainfall and predicted maximum water
+                    depth are shown together for the next
+                    three hours.
+
+                </div>
+
+                <div class="forecast-chart-container">
+
+                    <canvas
+                        id="flood-forecast-chart"
+                    ></canvas>
+
+                </div>
+
+                <div class="forecast-summary">
+
+                    <div class="forecast-summary-item">
+
+                        <span>
+                            Peak Time
+                        </span>
+
+                        <strong id="peak-time">
+                            --
+                        </strong>
+
+                    </div>
+
+                    <div class="forecast-summary-item">
+
+                        <span>
+                            Peak Rainfall
+                        </span>
+
+                        <strong id="peak-rainfall">
+                            -- mm
+                        </strong>
+
+                    </div>
+
+                    <div class="forecast-summary-item">
+
+                        <span>
+                            Peak Water Depth
+                        </span>
+
+                        <strong id="peak-depth">
+                            -- cm
+                        </strong>
+
+                    </div>
+
+                    <div class="forecast-summary-item">
+
+                        <span>
+                            Peak Risk
+                        </span>
+
+                        <strong id="peak-risk">
+                            --
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- RISK LEGEND -->
+
+            <section class="panel">
+
+                <h2>
+                    🎯 Flood Risk Levels
+                </h2>
+
+                <div class="legend-item">
+                    <span class="legend-box low"></span>
+                    <span>Low</span>
+                </div>
+
+                <div class="legend-item">
+                    <span class="legend-box moderate"></span>
+                    <span>Moderate</span>
+                </div>
+
+                <div class="legend-item">
+                    <span class="legend-box high"></span>
+                    <span>High</span>
+                </div>
+
+                <div class="legend-item">
+                    <span class="legend-box severe"></span>
+                    <span>Severe</span>
+                </div>
+
+            </section>
+
+
+            <!-- MODEL INFORMATION -->
+
+            <section class="panel">
+
+                <h2>
+                    ℹ️ Model Information
+                </h2>
+
+                <div class="info-row">
+
+                    <span>
+                        Source
+                    </span>
+
+                    <span id="model-source">
+                        --
+                    </span>
+
+                </div>
+
+                <div class="info-row">
+
+                    <span>
+                        Timestamp
+                    </span>
+
+                    <span id="model-time">
+                        --
+                    </span>
+
+                </div>
+
+            </section>
+
+
+            <!-- RISK CALCULATION -->
+
+            <section class="panel risk-info-panel">
+
+                <h2>
+                    🔎 How Risk Is Calculated
+                </h2>
+
+                <div class="risk-info">
+
+                    <span class="risk-info-dot"></span>
+
+                    <span>
+
+                        Flood risk comes from the backend
+                        risk field. Water depth is used as
+                        a fallback when a risk value is not
+                        available.
+
+                    </span>
+
+                </div>
+
+            </section>
+
+        </aside>
+
+
+        <!-- =================================================
+             MAP
+             ================================================= -->
+
+        <section class="map-container">
+
+            <div id="map"></div>
+
+            <div class="map-overlay">
+
+                <strong>
+                    Flood Risk Layer
+                </strong>
+
+                <span>
+                    Development model output
+                </span>
+
+            </div>
+
+            <div class="map-status-badge">
+
+                <span class="live-dot"></span>
+
+                <span>
+                    Simulated Flood Cells
+                </span>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <!-- =====================================================
+         LEAFLET JS
+         ===================================================== -->
+
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    ></script>
+
+
+    <!-- =====================================================
+         CHART.JS
+         ===================================================== -->
+
+    <script
+        src="https://cdn.jsdelivr.net/npm/chart.js"
+    ></script>
+
+
+    <!-- =====================================================
+         APPLICATION JS
+         ===================================================== -->
+
+    <script
+        src="app.js"
+    ></script>
+
+
+    <!-- =====================================================
+         INTRO BUTTON
+         ===================================================== -->
+
+    <script>
+
+        document.addEventListener(
+            "DOMContentLoaded",
+            function () {
+
+                const intro =
+                    document.getElementById(
+                        "echelon-intro"
+                    );
+
+                const enterButton =
+                    document.getElementById(
+                        "echelon-enter-btn"
+                    );
+
+                if (
+                    !intro ||
+                    !enterButton
+                ) {
+                    return;
+                }
+
+                enterButton.addEventListener(
+                    "click",
+                    function () {
+
+                        intro.classList.add(
+                            "hidden"
+                        );
+
+                        setTimeout(
+                            function () {
+
+                                if (
+                                    typeof map !==
+                                    "undefined"
+                                ) {
+
+                                    map.invalidateSize();
+
+                                }
+
+                            },
+                            250
+                        );
+
+                    }
+                );
+
+            }
+        );
+
+    </script>
+
+</body>
+
+</html>
