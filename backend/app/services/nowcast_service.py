@@ -68,15 +68,10 @@ SCENARIOS = {
 
 # 3x3 development rainfall distribution.
 #
-# The average factor is exactly 1.00, so:
+# This creates spatial variation across the rainfall grid.
 #
-#     average spatial rainfall
-#     ≈ scenario rainfall
-#
-# while individual grid cells have spatial variation.
-#
-# This is a DEVELOPMENT SIMULATION.
-# It is NOT live Doppler radar rainfall.
+# DEVELOPMENT SIMULATION ONLY.
+# NOT live Doppler radar rainfall.
 
 SPATIAL_FACTORS = [
     [0.25, 0.55, 0.80],
@@ -159,15 +154,30 @@ def _run_forecast_step(
         )
     )
 
-    # Apply spatial variation.
+    # ========================================================
+    # 2. APPLY SPATIAL VARIATION
+    # ========================================================
     #
-    # This makes the GIS layer look like a spatial
-    # rainfall/flood field rather than nine identical cells.
+    # IMPORTANT:
+    #
+    # RainfallGridCell does NOT contain row/column fields.
+    #
+    # Therefore we derive row/column from the cell's position
+    # in the ordered 3x3 rainfall grid.
+    #
+    # This fixes:
+    #
+    # AttributeError:
+    # 'RainfallGridCell' object has no attribute 'row'
 
-    for cell in rainfall_grid.cells:
+    columns = len(SPATIAL_FACTORS[0])
 
-        row = int(cell.row)
-        column = int(cell.column)
+    for cell_index, cell in enumerate(
+        rainfall_grid.cells
+    ):
+
+        row = cell_index // columns
+        column = cell_index % columns
 
         # Safety fallback in case grid dimensions change.
         if (
@@ -187,7 +197,7 @@ def _run_forecast_step(
         )
 
     # ========================================================
-    # 2. SURFACE FLOOD MODEL
+    # 3. SURFACE FLOOD MODEL
     # ========================================================
 
     surface_flood = (
@@ -197,7 +207,7 @@ def _run_forecast_step(
     )
 
     # ========================================================
-    # 3. DRAINAGE CAPACITY ANALYSIS
+    # 4. DRAINAGE CAPACITY ANALYSIS
     # ========================================================
 
     drainage_analysis = (
@@ -207,7 +217,7 @@ def _run_forecast_step(
     )
 
     # ========================================================
-    # 4. FLOOD STATISTICS
+    # 5. FLOOD STATISTICS
     # ========================================================
 
     max_water_depth_cm = 0.0
@@ -239,11 +249,10 @@ def _run_forecast_step(
         )
 
         if depth > 0.0:
-
             flooded_cells += 1
 
-        # Use water depth as the visible
-        # surface-flood risk classification.
+        # Surface flood risk is based on
+        # predicted water depth.
 
         cell_risk = calculate_risk(
             depth
@@ -268,10 +277,10 @@ def _run_forecast_step(
         flood_cells.append(
             {
                 "row":
-                    cell.row,
+                    int(cell.row),
 
                 "column":
-                    cell.column,
+                    int(cell.column),
 
                 "latitude":
                     cell.latitude,
@@ -315,7 +324,7 @@ def _run_forecast_step(
         )
 
     # ========================================================
-    # 5. DRAINAGE STATISTICS
+    # 6. DRAINAGE STATISTICS
     # ========================================================
 
     overloaded_drainage_edges = 0
@@ -398,32 +407,21 @@ def _run_forecast_step(
         )
 
     # ========================================================
-    # 6. OVERALL FLOOD RISK
+    # 7. OVERALL FLOOD RISK
     # ========================================================
     #
-    # IMPORTANT:
+    # User-facing flood alert is based on
+    # maximum surface water depth.
     #
-    # The user-facing overall flood alert is based on
-    # maximum SURFACE WATER DEPTH.
-    #
-    # Drainage overload is reported separately as
-    # "Critical Drains".
-    #
-    # This avoids showing:
-    #
-    #     Water depth = 2.5 cm
-    #     Flood Alert = SEVERE
-    #
-    # merely because a drainage edge is overloaded.
-    #
-    # That is much easier to explain during the SIH demo.
+    # Drainage overload is displayed separately
+    # as Critical Drains.
 
     overall_risk = calculate_risk(
         max_water_depth_cm
     )
 
     # ========================================================
-    # 7. RETURN FORECAST STEP
+    # 8. RETURN FORECAST STEP
     # ========================================================
 
     return {
@@ -632,15 +630,15 @@ def generate_nowcast(
     # PEAK RISK
     # ========================================================
     #
-    # Peak flood risk is determined from peak water depth,
-    # not drainage surcharge.
+    # Peak flood risk is determined from
+    # peak surface water depth.
 
     peak_forecast_risk = calculate_risk(
         max_forecast_depth_cm
     )
 
-    # Find the forecast timestep where
-    # maximum surface water depth occurs.
+    # Find timestep where maximum surface
+    # water depth occurs.
 
     peak_forecast = max(
         forecasts,

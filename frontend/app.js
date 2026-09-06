@@ -10,7 +10,7 @@
    API CONFIGURATION
    ============================================================ */
 
-const API_URL = "https://sih-26085-gigm.vercel.app";
+const API_URL = "http://127.0.0.1:8001";
 
 const MUMBAI_CENTER = [
     19.0760,
