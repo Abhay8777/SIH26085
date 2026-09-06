@@ -453,32 +453,16 @@ function getRiskFromDepth(depth) {
    FEATURE RISK
    ============================================================ */
 
+/* ============================================================
+   FEATURE RISK
+   ============================================================ */
+
 function getFeatureRisk(properties) {
 
-    const backendRisk =
-        normalizeRisk(
-            properties?.risk
-        );
-
-
-    if (backendRisk) {
-
-        return {
-            risk:
-                backendRisk,
-
-            source:
-                "Backend risk field"
-        };
-    }
-
-
     const depth =
-        Number(
-            properties?.water_depth_cm ||
-            0
+        safeNumber(
+            properties?.water_depth_cm
         );
-
 
     return {
 
@@ -488,7 +472,7 @@ function getFeatureRisk(properties) {
             ),
 
         source:
-            "Water depth fallback"
+            "Water depth"
     };
 }
 
@@ -975,9 +959,6 @@ function updateStats(
 
 
    let overall =
-    normalizeRisk(
-        properties?.overall_status
-    ) ||
     getRiskFromDepth(
         maxDepth
     );
@@ -1206,77 +1187,250 @@ if (blockageLayer) {
            CREATE GEOJSON
            ---------------------------------------------------- */
 
-        const features =
-            floodCells.map(
-                function (cell) {
+        /* ----------------------------------------------------
+   CREATE FLOOD GRID POLYGONS
+   ---------------------------------------------------- */
+
+/*
+   Development model uses a 3x3 spatial grid.
+
+   Each flood cell is converted from a point
+   into a geographic rectangle so that the
+   map displays flood depth spatially.
+*/
+
+const CELL_HALF_SIZE_LAT =
+    0.0045;
+
+const CELL_HALF_SIZE_LNG =
+    0.0045;
+
+
+const features =
+    floodCells.map(
+        function (cell) {
+
+            const latitude =
+                safeNumber(
+                    cell.latitude
+                );
+
+            const longitude =
+                safeNumber(
+                    cell.longitude
+                );
+
+
+            return {
+
+                type:
+                    "Feature",
+
+                geometry: {
+
+                    type:
+                        "Polygon",
+
+                    coordinates: [[
+
+                        [
+                            longitude -
+                            CELL_HALF_SIZE_LNG,
+
+                            latitude -
+                            CELL_HALF_SIZE_LAT
+                        ],
+
+                        [
+                            longitude +
+                            CELL_HALF_SIZE_LNG,
+
+                            latitude -
+                            CELL_HALF_SIZE_LAT
+                        ],
+
+                        [
+                            longitude +
+                            CELL_HALF_SIZE_LNG,
+
+                            latitude +
+                            CELL_HALF_SIZE_LAT
+                        ],
+
+                        [
+                            longitude -
+                            CELL_HALF_SIZE_LNG,
+
+                            latitude +
+                            CELL_HALF_SIZE_LAT
+                        ],
+
+                        [
+                            longitude -
+                            CELL_HALF_SIZE_LNG,
+
+                            latitude -
+                            CELL_HALF_SIZE_LAT
+                        ]
+
+                    ]]
+                },
+
+                properties:
+                    cell
+            };
+        }
+    );
+
+
+const geoJson = {
+
+    type:
+        "FeatureCollection",
+
+    features:
+        features
+};
+
+
+/* ----------------------------------------------------
+   CREATE FLOOD DEPTH GIS LAYER
+   ---------------------------------------------------- */
+
+floodLayer =
+    L.geoJSON(
+        geoJson,
+        {
+
+            pane:
+                "floodMarkers",
+
+            style:
+                function (feature) {
+
+                    const depth =
+                        safeNumber(
+                            feature.properties
+                                ?.water_depth_cm
+                        );
+
 
                     return {
 
-                        type:
-                            "Feature",
-
-                        geometry: {
-
-                            type:
-                                "Point",
-
-                            coordinates: [
-
-                                safeNumber(
-                                    cell.longitude
-                                ),
-
-                                safeNumber(
-                                    cell.latitude
+                        fillColor:
+                            getRiskColor(
+                                getRiskFromDepth(
+                                    depth
                                 )
-                            ]
-                        },
+                            ),
 
-                        properties:
-                            cell
+                        fillOpacity:
+                            0.48,
+
+                        color:
+                            getRiskColor(
+                                getRiskFromDepth(
+                                    depth
+                                )
+                            ),
+
+                        weight:
+                            1,
+
+                        opacity:
+                            0.75
                     };
-                }
-            );
+                },
 
 
-        const geoJson = {
+            onEachFeature:
+                function (
+                    feature,
+                    layer
+                ) {
 
-            type:
-                "FeatureCollection",
-
-            features:
-                features
-        };
+                    const properties =
+                        feature.properties ||
+                        {};
 
 
-        /* ----------------------------------------------------
-           CREATE FLOOD LAYER
-           ---------------------------------------------------- */
+                    layer.bindTooltip(
+                        createFloodTooltip(
+                            properties
+                        ),
+                        {
 
-        floodLayer =
-            L.geoJSON(
-                geoJson,
-                {
+                            sticky:
+                                true,
 
-                    pointToLayer:
-                        function (
-                            feature,
-                            latlng
-                        ) {
+                            direction:
+                                "top",
 
-                            return createFloodMarker(
-                                feature,
-                                latlng
-                            );
+                            opacity:
+                                1,
+
+                            className:
+                                "flood-hover-tooltip"
                         }
+                    );
+
+
+                    layer.bindPopup(
+                        createFloodPopup(
+                            properties
+                        ),
+                        {
+
+                            maxWidth:
+                                320,
+
+                            closeButton:
+                                true,
+
+                            autoPan:
+                                true
+                        }
+                    );
+
+
+                    layer.on(
+                        "mouseover",
+                        function () {
+
+                            this.setStyle({
+
+                                fillOpacity:
+                                    0.68,
+
+                                weight:
+                                    2
+                            });
+                        }
+                    );
+
+
+                    layer.on(
+                        "mouseout",
+                        function () {
+
+                            this.setStyle({
+
+                                fillOpacity:
+                                    0.48,
+
+                                weight:
+                                    1
+                            });
+                        }
+                    );
                 }
-            );
+        }
+    );
 
 
-        floodLayer.addTo(
-            map
-        );
-
+floodLayer.addTo(
+    map
+);
 
         /* ----------------------------------------------------
            DRAINAGE STATUS MAP
@@ -3293,6 +3447,28 @@ async function loadFloodForecastChart() {
                 : "heavy";
 
 
+        /* ====================================================
+           SELECTED FORECAST TIME
+           ==================================================== */
+
+        const forecastElement =
+            document.getElementById(
+                "forecast-time"
+            );
+
+
+        const selectedMinutes =
+            forecastElement
+                ? Number(
+                    forecastElement.value
+                )
+                : 0;
+
+
+        /* ====================================================
+           GET FULL 0–3 HOUR FORECAST
+           ==================================================== */
+
         const response =
             await fetch(
 
@@ -3343,6 +3519,10 @@ async function loadFloodForecastChart() {
         }
 
 
+        /* ====================================================
+           CHART DATA
+           ==================================================== */
+
         const labels =
             data.forecasts.map(
                 function (forecast) {
@@ -3376,9 +3556,26 @@ async function loadFloodForecastChart() {
             );
 
 
-        /* ----------------------------------------------------
+        /* ====================================================
+           FIND SELECTED FORECAST POINT
+           ==================================================== */
+
+        const selectedIndex =
+            data.forecasts.findIndex(
+                function (forecast) {
+
+                    return (
+                        Number(
+                            forecast.minutes_ahead
+                        ) === selectedMinutes
+                    );
+                }
+            );
+
+
+        /* ====================================================
            PEAK FORECAST
-           ---------------------------------------------------- */
+           ==================================================== */
 
         let peakForecast =
             null;
@@ -3468,12 +3665,9 @@ async function loadFloodForecastChart() {
             if (peakRisk) {
 
                 const risk =
-                    normalizeRisk(
-                        peakForecast.risk
-                    ) ||
-                    getRiskFromDepth(
-                        peakDepth
-                    );
+    getRiskFromDepth(
+        peakDepth
+    );
 
 
                 peakRisk.textContent =
@@ -3488,9 +3682,9 @@ async function loadFloodForecastChart() {
         }
 
 
-        /* ----------------------------------------------------
+        /* ====================================================
            CHART CANVAS
-           ---------------------------------------------------- */
+           ==================================================== */
 
         const canvas =
             document.getElementById(
@@ -3508,9 +3702,9 @@ async function loadFloodForecastChart() {
         }
 
 
-        /* ----------------------------------------------------
+        /* ====================================================
            DESTROY OLD CHART
-           ---------------------------------------------------- */
+           ==================================================== */
 
         if (
             floodForecastChart
@@ -3523,9 +3717,9 @@ async function loadFloodForecastChart() {
         }
 
 
-        /* ----------------------------------------------------
+        /* ====================================================
            CREATE CHART
-           ---------------------------------------------------- */
+           ==================================================== */
 
         floodForecastChart =
             new Chart(
@@ -3544,6 +3738,10 @@ async function loadFloodForecastChart() {
                             datasets:
                                 [
 
+                                    /* --------------------------------
+                                       RAINFALL
+                                       -------------------------------- */
+
                                     {
 
                                         label:
@@ -3558,9 +3756,40 @@ async function loadFloodForecastChart() {
                                         tension:
                                             0.3,
 
+                                        pointRadius:
+                                            rainfallData.map(
+                                                function (_, index) {
+
+                                                    return (
+                                                        index ===
+                                                        selectedIndex
+                                                    )
+                                                        ? 7
+                                                        : 3;
+                                                }
+                                            ),
+
+                                        pointHoverRadius:
+                                            rainfallData.map(
+                                                function (_, index) {
+
+                                                    return (
+                                                        index ===
+                                                        selectedIndex
+                                                    )
+                                                        ? 9
+                                                        : 5;
+                                                }
+                                            ),
+
                                         yAxisID:
                                             "rainfall"
                                     },
+
+
+                                    /* --------------------------------
+                                       WATER DEPTH
+                                       -------------------------------- */
 
                                     {
 
@@ -3575,6 +3804,32 @@ async function loadFloodForecastChart() {
 
                                         tension:
                                             0.3,
+
+                                        pointRadius:
+                                            depthData.map(
+                                                function (_, index) {
+
+                                                    return (
+                                                        index ===
+                                                        selectedIndex
+                                                    )
+                                                        ? 7
+                                                        : 3;
+                                                }
+                                            ),
+
+                                        pointHoverRadius:
+                                            depthData.map(
+                                                function (_, index) {
+
+                                                    return (
+                                                        index ===
+                                                        selectedIndex
+                                                    )
+                                                        ? 9
+                                                        : 5;
+                                                }
+                                            ),
 
                                         yAxisID:
                                             "depth"
@@ -3591,6 +3846,7 @@ async function loadFloodForecastChart() {
                             maintainAspectRatio:
                                 false,
 
+
                             interaction:
                                 {
 
@@ -3601,6 +3857,7 @@ async function loadFloodForecastChart() {
                                         false
                                 },
 
+
                             plugins:
                                 {
 
@@ -3609,8 +3866,26 @@ async function loadFloodForecastChart() {
 
                                             display:
                                                 true
+                                        },
+
+
+                                    title:
+                                        {
+
+                                            display:
+                                                true,
+
+                                            text:
+                                                `Selected forecast: +${selectedMinutes} min`,
+
+                                            padding:
+                                                {
+                                                    bottom:
+                                                        8
+                                                }
                                         }
                                 },
+
 
                             scales:
                                 {
@@ -3634,6 +3909,7 @@ async function loadFloodForecastChart() {
                                                         "Rainfall (mm)"
                                                 }
                                         },
+
 
                                     depth:
                                         {
@@ -3669,7 +3945,10 @@ async function loadFloodForecastChart() {
 
         console.log(
             "Flood forecast chart loaded:",
-            scenario
+            scenario,
+            "Selected:",
+            selectedMinutes,
+            "min"
         );
     }
 
@@ -3681,7 +3960,6 @@ async function loadFloodForecastChart() {
         );
     }
 }
-
 
 /* ============================================================
    INTRO SCREEN
