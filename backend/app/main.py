@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from backend.app.api.rainfall import router as rainfall_router
 from backend.app.api.flood import router as flood_router
@@ -99,5 +102,17 @@ app.include_router(
     nowcast_router,
     prefix="/flood",
     tags=["Flood Nowcast"],
+)
+
+# =========================================================
+# FRONTEND
+# =========================================================
+
+FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
+
+app.mount(
+    "/",
+    StaticFiles(directory=FRONTEND_DIR, html=True),
+    name="frontend",
 )
 
