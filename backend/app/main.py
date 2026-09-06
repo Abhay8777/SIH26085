@@ -9,6 +9,7 @@ from backend.app.api.flood import router as flood_router
 from backend.app.api.map import router as map_router
 from backend.app.api.nowcast import router as nowcast_router
 
+
 # =========================================================
 # SIH26085 URBAN FLOOD NOWCASTING API
 # =========================================================
@@ -34,20 +35,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-# =========================================================
-# ROOT
-# =========================================================
-
-@app.get("/")
-def root():
-    return {
-        "project": "SIH26085",
-        "service": "Urban Flood Nowcasting API",
-        "status": "online",
-        "version": "0.2.0",
-    }
 
 
 # =========================================================
@@ -104,6 +91,7 @@ app.include_router(
     tags=["Flood Nowcast"],
 )
 
+
 # =========================================================
 # FRONTEND
 # =========================================================
@@ -112,7 +100,9 @@ FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
 app.mount(
     "/",
-    StaticFiles(directory=FRONTEND_DIR, html=True),
+    StaticFiles(
+        directory=FRONTEND_DIR,
+        html=True,
+    ),
     name="frontend",
 )
-
