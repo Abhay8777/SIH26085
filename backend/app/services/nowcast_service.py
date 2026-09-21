@@ -1,6 +1,10 @@
 from datetime import datetime, timezone
 from typing import Literal
 
+from backend.app.services.rainfall_service import (
+    get_latest_rainfall,
+)
+
 from backend.app.services.rainfall_grid_service import (
     generate_uniform_rainfall_grid,
 )
@@ -26,7 +30,7 @@ RUNOFF_COEFFICIENT = 0.80
 
 
 # ============================================================
-# RAINFALL SCENARIOS
+# DEVELOPMENT RAINFALL SCENARIOS
 # ============================================================
 
 SCENARIOS = {
@@ -63,15 +67,39 @@ SCENARIOS = {
 
 
 # ============================================================
-# SPATIAL RAINFALL PATTERN
+# PROTOTYPE LIVE PROJECTION FACTORS
 # ============================================================
 
-# 3x3 development rainfall distribution.
+# These factors are used ONLY when live IMD observation
+# is available.
 #
-# This creates spatial variation across the rainfall grid.
+# IMPORTANT:
+# IMD AWS value is an observation, not a Doppler forecast.
+# Therefore this is explicitly treated as a prototype
+# short-horizon projection.
 #
-# DEVELOPMENT SIMULATION ONLY.
-# NOT live Doppler radar rainfall.
+# 0 min   -> 1.00 × current observation
+# 30 min  -> 1.05 ×
+# 60 min  -> 1.10 ×
+# 90 min  -> 1.15 ×
+# 120 min -> 1.20 ×
+# 150 min -> 1.25 ×
+# 180 min -> 1.30 ×
+
+LIVE_PROJECTION_FACTORS = [
+    1.00,
+    1.05,
+    1.10,
+    1.15,
+    1.20,
+    1.25,
+    1.30,
+]
+
+
+# ============================================================
+# SPATIAL RAINFALL PATTERN
+# ============================================================
 
 SPATIAL_FACTORS = [
     [0.25, 0.55, 0.80],
@@ -87,14 +115,6 @@ SPATIAL_FACTORS = [
 def calculate_risk(
     water_depth_cm: float,
 ) -> str:
-    """
-    Classify flood severity using surface water depth.
-
-    < 2 cm   -> low
-    < 10 cm  -> moderate
-    < 20 cm  -> high
-    >= 20 cm -> severe
-    """
 
     depth = max(
         0.0,
@@ -120,23 +140,20 @@ def calculate_risk(
 def _run_forecast_step(
     rainfall_mm: float,
     minutes_ahead: int,
+    rainfall_source: str = "development_scenario",
 ):
     """
-    Run one forecast timestep:
+    Run one forecast timestep.
+
+    Pipeline:
 
         Rainfall
             ↓
         Spatial rainfall grid
             ↓
-        DEM + runoff model
-            ↓
         Surface flood model
             ↓
         Drainage capacity analysis
-            ↓
-        Flood risk
-
-    Development simulation only.
     """
 
     rainfall_mm = max(
@@ -148,53 +165,59 @@ def _run_forecast_step(
     # 1. CREATE SPATIAL RAINFALL GRID
     # ========================================================
 
-    rainfall_grid = (
-        generate_uniform_rainfall_grid(
-            rainfall_mm
-        )
+    rainfall_grid = generate_uniform_rainfall_grid(
+        rainfall_mm
     )
 
     # ========================================================
     # 2. APPLY SPATIAL VARIATION
     # ========================================================
-    #
-    # IMPORTANT:
-    #
-    # RainfallGridCell does NOT contain row/column fields.
-    #
-    # Therefore we derive row/column from the cell's position
-    # in the ordered 3x3 rainfall grid.
-    #
-    # This fixes:
-    #
-    # AttributeError:
-    # 'RainfallGridCell' object has no attribute 'row'
 
-    columns = len(SPATIAL_FACTORS[0])
+    # Development simulation uses a synthetic spatial pattern.
+    #
+    # Live IMD currently provides a station observation,
+    # therefore we keep live rainfall spatially uniform across
+    # the prototype grid.
+    #
+    # A future Doppler radar grid can replace this section.
 
-    for cell_index, cell in enumerate(
-        rainfall_grid.cells
-    ):
+    if rainfall_source == "development_scenario":
 
-        row = cell_index // columns
-        column = cell_index % columns
+        columns = len(
+            SPATIAL_FACTORS[0]
+        )
 
-        # Safety fallback in case grid dimensions change.
-        if (
-            row < len(SPATIAL_FACTORS)
-            and column < len(SPATIAL_FACTORS[row])
+        for cell_index, cell in enumerate(
+            rainfall_grid.cells
         ):
 
-            factor = SPATIAL_FACTORS[row][column]
+            row = (
+                cell_index
+                // columns
+            )
 
-        else:
+            column = (
+                cell_index
+                % columns
+            )
 
-            factor = 1.0
+            if (
+                row < len(SPATIAL_FACTORS)
+                and column
+                < len(SPATIAL_FACTORS[row])
+            ):
+                factor = (
+                    SPATIAL_FACTORS[
+                        row
+                    ][column]
+                )
+            else:
+                factor = 1.0
 
-        cell.rainfall_mm = round(
-            rainfall_mm * factor,
-            2,
-        )
+            cell.rainfall_mm = round(
+                rainfall_mm * factor,
+                2,
+            )
 
     # ========================================================
     # 3. SURFACE FLOOD MODEL
@@ -225,11 +248,8 @@ def _run_forecast_step(
     flooded_cells = 0
 
     severe_cells = 0
-
     high_cells = 0
-
     moderate_cells = 0
-
     low_cells = 0
 
     flood_cells = []
@@ -251,75 +271,67 @@ def _run_forecast_step(
         if depth > 0.0:
             flooded_cells += 1
 
-        # Surface flood risk is based on
-        # predicted water depth.
-
         cell_risk = calculate_risk(
             depth
         )
 
         if cell_risk == "severe":
-
             severe_cells += 1
 
         elif cell_risk == "high":
-
             high_cells += 1
 
         elif cell_risk == "moderate":
-
             moderate_cells += 1
 
         else:
-
             low_cells += 1
 
         flood_cells.append(
             {
-                "row":
-                    int(cell.row),
+                "row": int(
+                    cell.row
+                ),
 
-                "column":
-                    int(cell.column),
+                "column": int(
+                    cell.column
+                ),
 
-                "latitude":
-                    cell.latitude,
+                "latitude": (
+                    cell.latitude
+                ),
 
-                "longitude":
-                    cell.longitude,
+                "longitude": (
+                    cell.longitude
+                ),
 
-                "elevation_m":
-                    round(
-                        float(
-                            cell.elevation_m
-                        ),
-                        2,
+                "elevation_m": round(
+                    float(
+                        cell.elevation_m
                     ),
+                    2,
+                ),
 
-                "rainfall_mm":
-                    round(
-                        float(
-                            cell.rainfall_mm
-                        ),
-                        2,
+                "rainfall_mm": round(
+                    float(
+                        cell.rainfall_mm
                     ),
+                    2,
+                ),
 
-                "runoff_mm":
-                    round(
-                        float(
-                            cell.runoff_mm
-                        ),
-                        2,
+                "runoff_mm": round(
+                    float(
+                        cell.runoff_mm
                     ),
+                    2,
+                ),
 
-                "water_depth_cm":
-                    round(
-                        depth,
-                        2,
-                    ),
+                "water_depth_cm": round(
+                    depth,
+                    2,
+                ),
 
-                "risk":
-                    cell_risk,
+                "risk": cell_risk,
             }
         )
 
@@ -328,7 +340,6 @@ def _run_forecast_step(
     # ========================================================
 
     overloaded_drainage_edges = 0
-
     severe_surcharge_edges = 0
 
     max_utilization = 0.0
@@ -350,26 +361,27 @@ def _run_forecast_step(
         )
 
         if utilization > 1.0:
-
             overloaded_drainage_edges += 1
 
         if (
             edge.status
             == "severe_surcharge"
         ):
-
             severe_surcharge_edges += 1
 
         drainage_edges.append(
             {
-                "edge_id":
-                    edge.edge_id,
+                "edge_id": (
+                    edge.edge_id
+                ),
 
-                "from_node":
-                    edge.from_node,
+                "from_node": (
+                    edge.from_node
+                ),
 
-                "to_node":
-                    edge.to_node,
+                "to_node": (
+                    edge.to_node
+                ),
 
                 "rainfall_runoff_m3s":
                     round(
@@ -401,20 +413,15 @@ def _run_forecast_step(
                         4,
                     ),
 
-                "status":
-                    edge.status,
+                "status": (
+                    edge.status
+                ),
             }
         )
 
     # ========================================================
     # 7. OVERALL FLOOD RISK
     # ========================================================
-    #
-    # User-facing flood alert is based on
-    # maximum surface water depth.
-    #
-    # Drainage overload is displayed separately
-    # as Critical Drains.
 
     overall_risk = calculate_risk(
         max_water_depth_cm
@@ -428,25 +435,25 @@ def _run_forecast_step(
         "minutes_ahead":
             minutes_ahead,
 
-        "time_label":
-            (
-                "Now"
-                if minutes_ahead == 0
-                else f"+{minutes_ahead} min"
-            ),
+        "time_label": (
+            "Now"
+            if minutes_ahead == 0
+            else f"+{minutes_ahead} min"
+        ),
 
-        "rainfall_mm":
-            round(
-                rainfall_mm,
-                2,
-            ),
+        "rainfall_mm": round(
+            rainfall_mm,
+            2,
+        ),
 
-        "runoff_mm":
-            round(
-                rainfall_mm
-                * RUNOFF_COEFFICIENT,
-                2,
-            ),
+        "rainfall_source":
+            rainfall_source,
+
+        "runoff_mm": round(
+            rainfall_mm
+            * RUNOFF_COEFFICIENT,
+            2,
+        ),
 
         "max_water_depth_cm":
             round(
@@ -457,20 +464,12 @@ def _run_forecast_step(
         "flooded_cells":
             flooded_cells,
 
-        "risk_counts":
-            {
-                "low":
-                    low_cells,
-
-                "moderate":
-                    moderate_cells,
-
-                "high":
-                    high_cells,
-
-                "severe":
-                    severe_cells,
-            },
+        "risk_counts": {
+            "low": low_cells,
+            "moderate": moderate_cells,
+            "high": high_cells,
+            "severe": severe_cells,
+        },
 
         "overloaded_drainage_edges":
             overloaded_drainage_edges,
@@ -501,62 +500,139 @@ def _run_forecast_step(
 
 def generate_nowcast(
     scenario: Literal[
+        "live",
         "normal",
         "heavy",
         "extreme",
-    ] = "heavy",
+    ] = "live",
 ):
     """
-    Generate a 0–3 hour urban flood nowcast.
+    Generate the 0–3 hour coupled flood nowcast.
 
-    Forecast points:
+    LIVE MODE:
+        Uses the latest IMD AWS observation as the baseline
+        and applies a clearly-labelled prototype projection.
 
-        0 min
-        +30 min
-        +60 min
-        +90 min
-        +120 min
-        +150 min
-        +180 min
+    SIMULATION MODE:
+        Uses normal/heavy/extreme development scenarios.
 
-    Rainfall values are simulated scenario
-    intensities at each forecast timestep.
-
-    They are NOT cumulative rainfall totals.
-
-    Current implementation:
-        Development simulation
-
-    Future integration:
-        IMD / Doppler radar nowcast input
+    IMPORTANT:
+        IMD AWS rainfall is an observation.
+        It is NOT claimed to be a Doppler 0–3 hour forecast.
     """
 
     # ========================================================
-    # VALIDATE SCENARIO
+    # 1. NORMALIZE SCENARIO
     # ========================================================
 
-    if scenario not in SCENARIOS:
+    scenario = scenario.lower().strip()
 
-        scenario = "heavy"
+    # ========================================================
+    # 2. LIVE MODE
+    # ========================================================
 
-    timestamp = datetime.now(
-        timezone.utc
-    )
+    if scenario == "live":
 
-    rainfall_forecast = (
-        SCENARIOS[
-            scenario
-        ]
-    )
+        live_rainfall = (
+            get_latest_rainfall()
+        )
+
+        if (
+            live_rainfall.status
+            == "imd_live"
+        ):
+
+            live_rainfall_mm = max(
+                0.0,
+                float(
+                    live_rainfall.rainfall_mm
+                ),
+            )
+
+            timestamp = (
+                live_rainfall.timestamp
+            )
+
+            # ==================================================
+            # PROTOTYPE 0–3H PROJECTION
+            # ==================================================
+
+            rainfall_values = []
+
+            for factor in (
+                LIVE_PROJECTION_FACTORS
+            ):
+
+                projected_rainfall = (
+                    live_rainfall_mm
+                    * factor
+                )
+
+                rainfall_values.append(
+                    round(
+                        projected_rainfall,
+                        2,
+                    )
+                )
+
+            rainfall_source = "IMD"
+            mode = (
+                "live_observation_projection"
+            )
+
+        else:
+
+            # ==================================================
+            # IMD FAILURE FALLBACK
+            # ==================================================
+
+            timestamp = (
+                datetime.now(
+                    timezone.utc
+                )
+            )
+
+            rainfall_values = (
+                SCENARIOS["heavy"]
+            )
+
+            rainfall_source = (
+                "development_fallback"
+            )
+
+            mode = "simulation"
+
+    # ========================================================
+    # 3. DEVELOPMENT SCENARIO MODE
+    # ========================================================
+
+    else:
+
+        timestamp = (
+            datetime.now(
+                timezone.utc
+            )
+        )
+
+        rainfall_values = SCENARIOS.get(
+            scenario,
+            SCENARIOS["heavy"],
+        )
+
+        rainfall_source = (
+            "development_scenario"
+        )
+
+        mode = "simulation"
+
+    # ========================================================
+    # 4. RUN 0–180 MINUTE FORECAST
+    # ========================================================
 
     forecasts = []
 
-    # ========================================================
-    # RUN 0–180 MINUTE FORECAST
-    # ========================================================
-
     for index, rainfall_mm in enumerate(
-        rainfall_forecast
+        rainfall_values
     ):
 
         minutes_ahead = (
@@ -566,11 +642,11 @@ def generate_nowcast(
 
         forecast_result = (
             _run_forecast_step(
-                rainfall_mm=
-                    rainfall_mm,
-
-                minutes_ahead=
-                    minutes_ahead,
+                rainfall_mm=rainfall_mm,
+                minutes_ahead=minutes_ahead,
+                rainfall_source=(
+                    rainfall_source
+                ),
             )
         )
 
@@ -579,7 +655,7 @@ def generate_nowcast(
         )
 
     # ========================================================
-    # OVERALL FORECAST SUMMARY
+    # 5. OVERALL SUMMARY
     # ========================================================
 
     max_forecast_depth_cm = max(
@@ -587,8 +663,8 @@ def generate_nowcast(
             forecast[
                 "max_water_depth_cm"
             ]
-
-            for forecast in forecasts
+            for forecast
+            in forecasts
         ),
         default=0.0,
     )
@@ -598,8 +674,8 @@ def generate_nowcast(
             forecast[
                 "rainfall_mm"
             ]
-
-            for forecast in forecasts
+            for forecast
+            in forecasts
         ),
         default=0.0,
     )
@@ -609,8 +685,8 @@ def generate_nowcast(
             forecast[
                 "overloaded_drainage_edges"
             ]
-
-            for forecast in forecasts
+            for forecast
+            in forecasts
         ),
         default=0,
     )
@@ -620,25 +696,17 @@ def generate_nowcast(
             forecast[
                 "max_drainage_utilization"
             ]
-
-            for forecast in forecasts
+            for forecast
+            in forecasts
         ),
         default=0.0,
     )
 
-    # ========================================================
-    # PEAK RISK
-    # ========================================================
-    #
-    # Peak flood risk is determined from
-    # peak surface water depth.
-
-    peak_forecast_risk = calculate_risk(
-        max_forecast_depth_cm
+    peak_forecast_risk = (
+        calculate_risk(
+            max_forecast_depth_cm
+        )
     )
-
-    # Find timestep where maximum surface
-    # water depth occurs.
 
     peak_forecast = max(
         forecasts,
@@ -658,7 +726,7 @@ def generate_nowcast(
     )
 
     # ========================================================
-    # RETURN COMPLETE NOWCAST
+    # 6. RETURN COMPLETE NOWCAST
     # ========================================================
 
     return {
@@ -666,10 +734,10 @@ def generate_nowcast(
             "SIH26085",
 
         "mode":
-            "simulation",
+            mode,
 
         "rainfall_source":
-            "development_scenario",
+            rainfall_source,
 
         "model_type":
             (
@@ -678,8 +746,11 @@ def generate_nowcast(
                 "nowcast"
             ),
 
-        "scenario":
-            scenario,
+        "scenario": (
+            None
+            if scenario == "live"
+            else scenario
+        ),
 
         "generated_at":
             timestamp,
@@ -690,35 +761,34 @@ def generate_nowcast(
         "interval_minutes":
             FORECAST_INTERVAL_MINUTES,
 
-        "summary":
-            {
-                "peak_rainfall_mm":
-                    round(
-                        max_forecast_rainfall_mm,
-                        2,
-                    ),
+        "summary": {
+            "peak_rainfall_mm":
+                round(
+                    max_forecast_rainfall_mm,
+                    2,
+                ),
 
-                "peak_water_depth_cm":
-                    round(
-                        max_forecast_depth_cm,
-                        2,
-                    ),
+            "peak_water_depth_cm":
+                round(
+                    max_forecast_depth_cm,
+                    2,
+                ),
 
-                "peak_time_minutes":
-                    peak_time_minutes,
+            "peak_time_minutes":
+                peak_time_minutes,
 
-                "peak_overloaded_drainage_edges":
-                    peak_overloaded_edges,
+            "peak_overloaded_drainage_edges":
+                peak_overloaded_edges,
 
-                "peak_drainage_utilization":
-                    round(
-                        peak_drainage_utilization,
-                        3,
-                    ),
+            "peak_drainage_utilization":
+                round(
+                    peak_drainage_utilization,
+                    3,
+                ),
 
-                "peak_risk":
-                    peak_forecast_risk,
-            },
+            "peak_risk":
+                peak_forecast_risk,
+        },
 
         "forecasts":
             forecasts,

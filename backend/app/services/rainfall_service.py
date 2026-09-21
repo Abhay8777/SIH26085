@@ -1,10 +1,22 @@
 import os
+from pathlib import Path
+from dotenv import load_dotenv
 from datetime import datetime, timezone
 from typing import Any
 
 import requests
 
 from backend.app.models.rainfall import RainfallData
+
+
+
+# =========================================================
+# LOAD ENVIRONMENT VARIABLES
+# =========================================================
+
+BASE_DIR = Path(__file__).resolve().parents[2]
+load_dotenv(BASE_DIR / ".env")
+
 
 
 # =========================================================
@@ -74,6 +86,61 @@ def _get_api_key() -> str | None:
 
 
 # =========================================================
+# JWT TOKEN
+# =========================================================
+
+def _get_jwt_token() -> str:
+
+    email = os.getenv("IMD_EMAIL")
+    password = os.getenv("IMD_PASSWORD")
+
+    if not email or not password:
+        raise RuntimeError(
+            "IMD_EMAIL or IMD_PASSWORD is not configured"
+        )
+
+    response = requests.post(
+        "https://api.imd.gov.in/api/oauth/token.php",
+        json={
+            "email": email,
+            "password": password,
+        },
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    jwt_token = None
+
+    if isinstance(data, dict):
+
+        for key in (
+            "token",
+            "access_token",
+            "jwt",
+            "jwt_token",
+        ):
+            value = data.get(key)
+
+            if isinstance(value, str) and value.strip():
+                jwt_token = value.strip()
+                break
+
+    if not jwt_token:
+        raise RuntimeError(
+            "IMD JWT token was not returned"
+        )
+
+    return jwt_token
+
+
+# =========================================================
 # GENERIC IMD REQUEST
 # =========================================================
 
@@ -81,12 +148,6 @@ def _imd_get(
     endpoint: str,
     params: dict[str, Any] | None = None,
 ) -> Any:
-    """
-    Send a GET request to an IMD endpoint.
-
-    The endpoint must be supplied by the approved IMD API
-    documentation/account configuration.
-    """
 
     api_key = _get_api_key()
 
@@ -95,12 +156,15 @@ def _imd_get(
             "IMD_API_KEY is not configured"
         )
 
+    jwt_token = _get_jwt_token()
+
     endpoint = endpoint.strip("/")
 
     url = f"{IMD_BASE_URL}/{endpoint}"
 
     headers = {
-        "Authorization": f"Bearer {api_key}",
+        "X-API-KEY": api_key,
+        "Authorization": f"Bearer {jwt_token}",
         "Accept": "application/json",
     }
 
@@ -501,6 +565,82 @@ def get_latest_rainfall() -> RainfallData:
     # =====================================================
 
     api_key = _get_api_key()
+
+    if not api_key:
+        return _development_response(
+            status="waiting_for_imd_api_key",
+        )
+
+    # =====================================================
+    # 2. REQUEST IMD
+    # =====================================================
+
+    try:
+
+        raw_data = _fetch_aws_data()
+
+    except requests.HTTPError as exc:
+
+        status_code = (
+            exc.response.status_code
+            if exc.response is not None
+            else "unknown"
+        )
+
+        return _development_response(
+            status=(
+                f"imd_http_error:{status_code}"
+            ),
+        )
+
+    except requests.Timeout:
+
+        return _development_response(
+            status="imd_api_error:timeout",
+        )
+
+    except requests.ConnectionError:
+
+        return _development_response(
+            status="imd_api_error:connection",
+        )
+
+    except requests.RequestException as exc:
+
+        return _development_response(
+            status=(
+                "imd_api_error:"
+                f"{type(exc).__name__}"
+            ),
+        )
+
+    except RuntimeError as exc:
+
+        return _development_response(
+            status=(
+                "imd_configuration_error:"
+                f"{str(exc)}"
+            ),
+        )
+
+    # =====================================================
+    # 3. PARSE RESPONSE
+    # =====================================================
+
+    try:
+
+        return _parse_imd_rainfall(
+            raw_data
+        )
+
+    except Exception as exc:
+
+        return _development_response(
+            status=(
+                "rainfall_processing_error:"
+                f"{type(exc).__name__}"
+            ),
+        )
 
     if not api_key:
 

@@ -13,9 +13,8 @@
 const API_URL =
   window.location.hostname === "127.0.0.1" ||
   window.location.hostname === "localhost"
-    ? "http://127.0.0.1:8001"
+    ? "http://127.0.0.1:8000"
     : "";
-
 const MUMBAI_CENTER = [
     19.0760,
     72.8777
@@ -1078,7 +1077,7 @@ async function loadFloodLayer() {
         const scenario =
             scenarioElement
                 ? scenarioElement.value
-                : "heavy";
+                : "live";
 
 
         console.log(

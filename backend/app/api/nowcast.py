@@ -35,6 +35,7 @@ VALID_FORECAST_MINUTES = {
 }
 
 VALID_SCENARIOS = {
+    "live",
     "normal",
     "heavy",
     "extreme",
@@ -60,7 +61,7 @@ def _validate_scenario(
             "status": "error",
             "message": (
                 "Invalid rainfall scenario. "
-                "Use normal, heavy, or extreme."
+                "Use live, normal, heavy, or extreme."
             ),
         }
 
@@ -90,10 +91,10 @@ def _validate_forecast_minutes(
 @router.get("/nowcast")
 def flood_nowcast(
     scenario: str = Query(
-        default="heavy",
+        default="live",
         description=(
-            "Rainfall scenario: "
-            "normal, heavy, or extreme"
+            "Rainfall mode: "
+            "live, normal, heavy, or extreme"
         ),
     )
 ):
@@ -110,6 +111,8 @@ def flood_nowcast(
             ↓
         Risk analysis
     """
+
+    scenario = scenario.lower().strip()
 
     scenario_error = _validate_scenario(
         scenario
@@ -130,10 +133,10 @@ def flood_nowcast(
 @router.get("/nowcast-map")
 def flood_nowcast_map(
     scenario: str = Query(
-        default="heavy",
+        default="live",
         description=(
-            "Rainfall scenario: "
-            "normal, heavy, or extreme"
+            "Rainfall mode: "
+            "live, normal, heavy, or extreme"
         ),
     ),
 
@@ -151,6 +154,12 @@ def flood_nowcast_map(
     Return spatial flood + drainage information
     for the selected 0-3 hour forecast timestep.
     """
+
+    # ========================================================
+    # NORMALIZE INPUT
+    # ========================================================
+
+    scenario = scenario.lower().strip()
 
     # ========================================================
     # VALIDATE INPUT
@@ -226,10 +235,19 @@ def flood_nowcast_map(
     return {
         "status": "success",
         "project": "SIH26085",
+
         "mode": nowcast["mode"],
-        "rainfall_source": nowcast["rainfall_source"],
+
+        "rainfall_source": (
+            nowcast["rainfall_source"]
+        ),
+
         "scenario": nowcast["scenario"],
-        "generated_at": nowcast["generated_at"],
+
+        "generated_at": (
+            nowcast["generated_at"]
+        ),
+
         "forecast_horizon_minutes": (
             nowcast["forecast_horizon_minutes"]
         ),
@@ -238,36 +256,47 @@ def flood_nowcast_map(
             "minutes_ahead": (
                 selected_forecast["minutes_ahead"]
             ),
+
             "time_label": (
                 selected_forecast["time_label"]
             ),
+
             "rainfall_mm": (
                 selected_forecast["rainfall_mm"]
             ),
+
             "runoff_mm": (
                 selected_forecast["runoff_mm"]
             ),
+
             "max_water_depth_cm": (
-                selected_forecast["max_water_depth_cm"]
+                selected_forecast[
+                    "max_water_depth_cm"
+                ]
             ),
+
             "flooded_cells": (
                 selected_forecast["flooded_cells"]
             ),
+
             "overloaded_drainage_edges": (
                 selected_forecast[
                     "overloaded_drainage_edges"
                 ]
             ),
+
             "severe_surcharge_edges": (
                 selected_forecast[
                     "severe_surcharge_edges"
                 ]
             ),
+
             "max_drainage_utilization": (
                 selected_forecast[
                     "max_drainage_utilization"
                 ]
             ),
+
             "risk": (
                 selected_forecast["risk"]
             ),
@@ -306,10 +335,10 @@ def flood_safe_route(
     ),
 
     scenario: str = Query(
-        default="heavy",
+        default="live",
         description=(
-            "Rainfall scenario: "
-            "normal, heavy, or extreme"
+            "Rainfall mode: "
+            "live, normal, heavy, or extreme"
         ),
     ),
 
@@ -327,6 +356,12 @@ def flood_safe_route(
     Calculate a flood-safe route using
     the selected coupled flood forecast.
     """
+
+    # ========================================================
+    # NORMALIZE INPUT
+    # ========================================================
+
+    scenario = scenario.lower().strip()
 
     # ========================================================
     # VALIDATE INPUT
@@ -407,30 +442,38 @@ def flood_safe_route(
     return {
         "status": "success",
         "project": "SIH26085",
+
         "mode": nowcast["mode"],
+
         "rainfall_source": (
             nowcast["rainfall_source"]
         ),
+
         "scenario": nowcast["scenario"],
 
         "forecast": {
             "minutes_ahead": (
                 selected_forecast["minutes_ahead"]
             ),
+
             "time_label": (
                 selected_forecast["time_label"]
             ),
+
             "rainfall_mm": (
                 selected_forecast["rainfall_mm"]
             ),
+
             "runoff_mm": (
                 selected_forecast["runoff_mm"]
             ),
+
             "max_water_depth_cm": (
                 selected_forecast[
                     "max_water_depth_cm"
                 ]
             ),
+
             "risk": (
                 selected_forecast["risk"]
             ),
@@ -455,10 +498,10 @@ def blockage_simulation(
     ),
 
     scenario: str = Query(
-        default="heavy",
+        default="live",
         description=(
-            "Rainfall scenario: "
-            "normal, heavy, or extreme"
+            "Rainfall mode: "
+            "live, normal, heavy, or extreme"
         ),
     ),
 
@@ -478,6 +521,13 @@ def blockage_simulation(
     Simulates an 80% drainage capacity loss and
     estimates the resulting flood-depth impact.
     """
+
+    # ========================================================
+    # NORMALIZE INPUT
+    # ========================================================
+
+    scenario = scenario.lower().strip()
+    edge_id = edge_id.upper().strip()
 
     # ========================================================
     # VALIDATE INPUT
@@ -500,8 +550,6 @@ def blockage_simulation(
     # ========================================================
     # VALIDATE DRAINAGE EDGE
     # ========================================================
-
-    edge_id = edge_id.upper().strip()
 
     if edge_id not in VALID_DRAINAGE_EDGES:
         return {
@@ -664,30 +712,38 @@ def blockage_simulation(
     return {
         "status": "success",
         "project": "SIH26085",
+
         "mode": "development_simulation",
+
         "rainfall_source": (
             nowcast["rainfall_source"]
         ),
-        "scenario": scenario,
+
+        "scenario": nowcast["scenario"],
 
         "forecast": {
             "minutes_ahead": (
                 selected_forecast["minutes_ahead"]
             ),
+
             "time_label": (
                 selected_forecast["time_label"]
             ),
+
             "rainfall_mm": (
                 selected_forecast["rainfall_mm"]
             ),
+
             "runoff_mm": (
                 selected_forecast["runoff_mm"]
             ),
+
             "max_water_depth_cm": (
                 selected_forecast[
                     "max_water_depth_cm"
                 ]
             ),
+
             "risk": (
                 selected_forecast["risk"]
             ),
